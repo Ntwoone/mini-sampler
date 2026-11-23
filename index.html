@@ -149,7 +149,7 @@ button:focus-visible,.ctl:focus-visible,label.icon:focus-within{outline:2px soli
     <div class="io">
       <label class="icon" title="Importer un son" aria-label="Importer un son">
         <svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M3 13v8h18v-8"/></svg>
-        <input class="visually-hidden" type="file" id="fileInput" accept="audio/*,.mp3,.wav,.wave">
+        <input class="visually-hidden" type="file" id="fileInput" accept="audio/*,.mp3,.wav,.wave,.m4a,.aac,audio/mp4,audio/x-m4a">
       </label>
       <button class="icon" id="btnExport" type="button" title="Exporter le WAV" aria-label="Exporter le WAV">
         <svg viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5M3 13v8h18v-8"/></svg>
@@ -840,6 +840,19 @@ function sniffRate(ab) {
     }
     return 0;
   }
+  if (b.length > 12 && tag(4) === 'ftyp') {          // M4A / MP4 : fréquence lue dans la description audio
+    for (let p = 8; p < b.length - 40; p++) {
+      if (b[p] !== 0x73 || tag(p) !== 'stsd') continue;
+      for (let q = p + 4, e = Math.min(b.length - 32, p + 256); q < e; q++) {
+        const t = tag(q);
+        if (t === 'mp4a' || t === 'alac' || t === 'ac-3' || t === 'ec-3') {
+          const r = dv.getUint32(q + 28) >>> 16;
+          if (r >= 8000 && r <= 192000) return r;
+        }
+      }
+    }
+    return 0;
+  }
   let p = 0;
   if (b.length > 10 && b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x33) {
     p = 10 + ((b[6] & 0x7f) << 21 | (b[7] & 0x7f) << 14 | (b[8] & 0x7f) << 7 | (b[9] & 0x7f));
@@ -882,7 +895,7 @@ async function importFile(f) {
     store.set('file', { name: f.name, type: f.type, data: ab });
     saveState();
   } catch (err) {
-    toast('Ce fichier ne peut pas être lu. Formats acceptés : MP3 et WAV.');
+    toast('Ce fichier ne peut pas être lu. Formats acceptés : MP3, WAV et M4A.');
   }
 }
 $('fileInput').addEventListener('change', (e) => {
