@@ -67,9 +67,9 @@ button:focus-visible,.ctl:focus-visible,label.icon:focus-within{outline:2px soli
 .thumb{position:absolute;top:3px;height:12px;border-radius:6px;background:var(--ink);min-width:18px}
 
 .deck{display:flex;align-items:center;justify-content:center;gap:10px;height:96px;flex:none}
-.side{display:flex;gap:8px;align-items:center}
-.deck[data-mode="knob"] .side-end .coarse{order:2}
-.deck[data-mode="bar"] .side{flex-direction:column;gap:6px}
+.side{display:flex;gap:6px;align-items:center}
+.deck[data-mode="bar"] .side-end .coarse{order:-1}
+.deck[data-mode="bar"] .side{flex-direction:column;gap:4px}
 .arrow{width:44px;height:72px;display:grid;place-items:center;border-radius:10px}
 .arrow svg{width:22px;height:40px;stroke:var(--muted);stroke-width:3;fill:none;stroke-linecap:round;stroke-linejoin:round}
 .arrow:active svg{stroke:var(--ink)}
@@ -85,7 +85,7 @@ button:focus-visible,.ctl:focus-visible,label.icon:focus-within{outline:2px soli
 #play[aria-pressed="true"] .stop{display:block}
 
 .ctl{touch-action:none;cursor:ew-resize;outline:none}
-.knob{width:66px;height:66px;margin:0 auto}
+.knob{width:60px;height:60px;margin:0 auto}
 .knob svg{width:100%;height:100%;display:block}
 .knob .tk{stroke:var(--tick);stroke-width:3;stroke-linecap:round}
 .knob .kb{fill:var(--panel);stroke:var(--ink);stroke-width:4}
@@ -96,8 +96,8 @@ button:focus-visible,.ctl:focus-visible,label.icon:focus-within{outline:2px soli
 .cap{text-align:center;font-size:10px;line-height:1.25;margin-top:2px}
 .cap .nm{display:block;text-transform:uppercase;letter-spacing:.08em;color:var(--tick)}
 .cap .st{display:block;font-family:var(--font-num);font-size:11px;color:var(--ink)}
-.strip{display:none;position:relative;width:172px;height:38px;border-radius:9px;background:var(--panel);border:1.5px solid var(--line);overflow:hidden}
-.strip-ticks{position:absolute;inset:8px 0;background-image:repeating-linear-gradient(90deg,var(--tick) 0 1.5px,transparent 1.5px 7px)}
+.strip{display:none;position:relative;width:160px;height:28px;border-radius:9px;background:var(--panel);border:1.5px solid var(--line);overflow:hidden}
+.strip-ticks{position:absolute;inset:6px 0;background-image:repeating-linear-gradient(90deg,var(--tick) 0 1.5px,transparent 1.5px 7px)}
 .ctl.coarse .strip-ticks{opacity:.45}
 .strip::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:2px;margin-left:-1px;background:var(--ink)}
 .strip-label{position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:10px;font-weight:600;background:var(--panel);padding:2px 5px;border-radius:5px;z-index:1;white-space:nowrap}
@@ -395,11 +395,11 @@ function shiftLoop(dir) {
 }
 function stepSamples(res) {
   if (S.prec) return res === 'coarse' ? Math.round(0.005 * S.sr) : 1;
-  return Math.round((res === 'coarse' ? 0.1 : 0.005) * S.sr);
+  return Math.round((res === 'coarse' ? 0.05 : 0.005) * S.sr);
 }
 function stepLabel(res) {
   if (S.prec) return res === 'coarse' ? '5 ms' : '1 éch.';
-  return res === 'coarse' ? '100 ms' : '5 ms';
+  return res === 'coarse' ? '50 ms' : '5 ms';
 }
 
 /* ---------- Vue ---------- */
@@ -470,7 +470,8 @@ function updateTimes() {
 }
 function updateLabels() {
   document.querySelectorAll('.ctl').forEach(el => {
-    el.querySelectorAll('.st').forEach(s => { s.textContent = stepLabel(el.dataset.res); });
+    const lb = stepLabel(el.dataset.res), td = +el.dataset.tap;
+    el.querySelectorAll('.st').forEach(s => { s.textContent = td < 0 ? '◂ ' + lb : td > 0 ? lb + ' ▸' : lb; });
   });
 }
 
@@ -681,16 +682,16 @@ function knobSVG() {
   }
   return `<svg viewBox="0 0 100 100" aria-hidden="true">${t}<circle class="kb" cx="50" cy="50" r="29"/><g class="ind"><line x1="50" y1="50" x2="50" y2="25"/></g></svg>`;
 }
-function makeCtl(which, res) {
+function makeCtl(which, res, tap = 0) {
   const el = document.createElement('div');
-  el.className = 'ctl ' + res; el.dataset.which = which; el.dataset.res = res;
+  el.className = 'ctl ' + res; el.dataset.which = which; el.dataset.res = res; el.dataset.tap = tap;
   el.tabIndex = 0; el.setAttribute('role', 'slider');
   const nm = which === 'start' ? 'Début' : 'Fin';
-  el.setAttribute('aria-label', `${nm}, réglage ${res === 'coarse' ? 'large' : 'fin'}`);
+  el.setAttribute('aria-label', `${nm}, réglage ${res === 'coarse' ? 'large' : 'fin'}${tap ? (tap < 0 ? ', un appui recule' : ', un appui avance') : ''}`);
   el.innerHTML = `<div class="knob">${knobSVG()}</div><div class="cap"><span class="nm">${nm}</span><span class="st"></span></div>` +
     `<div class="strip"><span class="strip-ticks"></span><span class="strip-label">${nm}<span class="st"></span></span></div>`;
   const ind = el.querySelector('.ind'), ticks = el.querySelector('.strip-ticks');
-  let pid = null, lx = 0, ly = 0, acc = 0, angle = 0, off = 0;
+  let pid = null, lx = 0, ly = 0, acc = 0, angle = 0, off = 0, t0 = 0, moved = false;
   const steps = (n) => {
     if (!S.buf) return;
     const st = stepSamples(res), dir = Math.sign(n);
@@ -699,7 +700,7 @@ function makeCtl(which, res) {
   };
   el.addEventListener('pointerdown', (e) => {
     if (pid !== null) return;
-    pid = e.pointerId; el.setPointerCapture(pid); lx = e.clientX; ly = e.clientY; acc = 0;
+    pid = e.pointerId; el.setPointerCapture(pid); lx = e.clientX; ly = e.clientY; acc = 0; t0 = performance.now(); moved = false;
     el.classList.add('on'); e.preventDefault();
   });
   el.addEventListener('pointermove', (e) => {
@@ -711,9 +712,13 @@ function makeCtl(which, res) {
     let n = 0;
     while (acc >= PX) { acc -= PX; n++; }
     while (acc <= -PX) { acc += PX; n--; }
-    if (n) steps(n);
+    if (n) { moved = true; steps(n); }
   });
-  const up = (e) => { if (e.pointerId !== pid) return; pid = null; el.classList.remove('on'); };
+  const up = (e) => {
+    if (e.pointerId !== pid) return;
+    pid = null; el.classList.remove('on');
+    if (tap && e.type === 'pointerup' && !moved && performance.now() - t0 < 350) steps(tap);   // appui court = un cran
+  };
   el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
   el.addEventListener('keydown', (e) => {
     const k = e.key;
@@ -722,8 +727,9 @@ function makeCtl(which, res) {
   });
   return el;
 }
-$('sideStart').append(makeCtl('start', 'coarse'), makeCtl('start', 'fine'));
-$('sideEnd').append(makeCtl('end', 'coarse'), makeCtl('end', 'fine'));
+// Gauche : 50 ms | 5 ms (appui = recule) | 5 ms (appui = avance) — droite en miroir
+$('sideStart').append(makeCtl('start', 'coarse'), makeCtl('start', 'fine', -1), makeCtl('start', 'fine', 1));
+$('sideEnd').append(makeCtl('end', 'fine', -1), makeCtl('end', 'fine', 1), makeCtl('end', 'coarse'));
 
 /* ---------- Boutons ---------- */
 $('play').addEventListener('pointerdown', (e) => { e.preventDefault(); toggle(); });

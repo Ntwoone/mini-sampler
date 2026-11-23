@@ -1,5 +1,5 @@
 // Mini Sampler : fonctionne hors ligne. Changer VERSION à chaque mise à jour.
-const VERSION = 'mini-sampler-v2';
+const VERSION = 'mini-sampler-v3';
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
