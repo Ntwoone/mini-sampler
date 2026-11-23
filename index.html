@@ -148,11 +148,11 @@ button:focus-visible,.ctl:focus-visible,label.icon:focus-within{outline:2px soli
     </div>
     <div class="io">
       <label class="icon" title="Importer un son" aria-label="Importer un son">
-        <svg viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5M3 13v8h18v-8"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M3 13v8h18v-8"/></svg>
         <input class="visually-hidden" type="file" id="fileInput" accept="audio/*,.mp3,.wav,.wave">
       </label>
       <button class="icon" id="btnExport" type="button" title="Exporter le WAV" aria-label="Exporter le WAV">
-        <svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M3 21h18"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5M3 13v8h18v-8"/></svg>
       </button>
     </div>
   </header>
@@ -531,10 +531,21 @@ function draw() {
     line(Math.max(i0, S.start), Math.min(i1, S.end), C.ink);
   }
 
+  {
+    const xs = Math.max(0, xOf(S.start)), xe = Math.min(W, xOf(S.end));
+    if (xe - xs > 4) {
+      const on = S.dragMarker === 'loop';
+      g.globalAlpha = on ? 0.22 : 0.1; g.fillStyle = on ? C.accent : C.ink;
+      g.fillRect(xs, 0, xe - xs, 14);
+      g.globalAlpha = 1;
+      const cx = (xs + xe) / 2;
+      if (xe - xs > 30) { g.fillStyle = on ? C.accent : C.muted; for (const k of [-6, 0, 6]) g.fillRect(Math.round(cx + k) - 1, 4, 2, 6); }
+    }
+  }
   for (const which of ['start', 'end']) {
     const x = Math.round(xOf(S[which])) + 0.5;
     if (x < -12 || x > W + 12) continue;
-    const col = S.dragMarker === which ? C.accent : C.ink;
+    const col = (S.dragMarker === which || S.dragMarker === 'loop') ? C.accent : C.ink;
     g.strokeStyle = col; g.lineWidth = 1;
     g.beginPath(); g.moveTo(x, 0); g.lineTo(x, base); g.stroke();
     g.fillStyle = col; g.beginPath(); g.moveTo(x, base - 1); g.lineTo(x - 7, base + 11); g.lineTo(x + 7, base + 11); g.closePath(); g.fill();
@@ -563,6 +574,7 @@ function frame() {
 const pts = new Map();
 let gesture = null;
 function localX(e) { return e.clientX - cv.getBoundingClientRect().left; }
+function localY(e) { return e.clientY - cv.getBoundingClientRect().top; }
 function sampleAt(x) { return S.vs + x * (S.ve - S.vs) / waveW(); }
 function snapAbs(t) {
   if (!S.snap) return t;
@@ -588,6 +600,9 @@ cv.addEventListener('pointerdown', (e) => {
     gesture = { type: 'marker' };
     S.dragMarker = ds < de ? 'start' : de < ds ? 'end' : (x > xs ? 'end' : 'start');
     S.dirty = true;
+  } else if (localY(e) < cv.clientHeight * 0.45 && x > xs && x < xe) {
+    gesture = { type: 'loop', x0: x, s0: S.start, e0: S.end };      // glisser la boucle entière
+    S.dragMarker = 'loop'; S.dirty = true;
   } else {
     gesture = { type: 'pan', x0: x, vs0: S.vs };
   }
@@ -603,6 +618,14 @@ cv.addEventListener('pointermove', (e) => {
     S.vs = gesture.c0 - mx / waveW() * span; S.ve = S.vs + span; clampView();
   } else if (gesture.type === 'marker') {
     setMarker(S.dragMarker, snapAbs(sampleAt(localX(e))));
+  } else if (gesture.type === 'loop') {
+    const spp = (S.ve - S.vs) / waveW();
+    let d = Math.round((localX(e) - gesture.x0) * spp);
+    d = Math.max(-gesture.s0, Math.min(S.len - gesture.e0, d));
+    if (gesture.s0 + d !== S.start) {
+      S.start = gesture.s0 + d; S.end = gesture.e0 + d;
+      applyLoop(); updateTimes(); S.dirty = true; saveState();
+    }
   } else if (gesture.type === 'pan') {
     const spp = (S.ve - S.vs) / waveW(), span = S.ve - S.vs;
     S.vs = gesture.vs0 - (localX(e) - gesture.x0) * spp; S.ve = S.vs + span; clampView();
